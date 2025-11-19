@@ -18,7 +18,7 @@ options(scipen = 999, dplyr.summarise.inform = FALSE)
 # 1) CONFIGURACIÓN INICIAL Y FUNCIONES AUXILIARES
 # ==========================================================
 ANIOS <- 2016:2024 # Años a procesar
-CARPETA_DATOS <- "." # RUTA ACTUALIZADA
+CARPETA_DATOS <- "C:/Users/Joaking/Desktop/No denuncia/nodenuncia_paper/data" # RUTA ACTUALIZADA
 
 # --- Funciones auxiliares (robustecidas) ---
 guess_delim <- function(file){
@@ -356,3 +356,5 @@ if (length(lista_enusc_procesada) > 0) {
   enusc_combinada_completa <- NULL
   enusc_victimas <- NULL
 }
+
+
