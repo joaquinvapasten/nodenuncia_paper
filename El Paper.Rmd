@@ -1,0 +1,121 @@
+---
+title: "Factores que explican la No-Denuncia en Chile"
+author: "Joaquin Valenzuela"
+date: "2025-11-24"
+output: pdf_document
+---
+
+# 1. Introducción
+
+La seguridad pública se mantiene como una preocupación central y persistente en la agenda sociopolítica chilena. En este contexto, el estudio de los Delitos de Mayor Connotación Social (DMCS), que incluyen ilícitos de alto impacto como el robo con violencia o intimidación, el hurto, las lesiones, la violación y el homicidio, requiere un análisis que trascienda las cifras oficiales. El fenómeno de la cifra negra del delito, que se refiere a aquellos crímenes efectivamente ocurridos que no son reportados a las autoridades competentes, constituye una distorsión crítica para la comprensión real de la criminalidad. Las estimaciones históricas para Chile sugieren que esta cifra negra es superior al 50% del total de la actividad delictual, alcanzando porcentajes de hasta el 73,1% para los delitos cometidos en el espacio público contra las personas, como el robo con violencia o el hurto.
+
+La masiva abstención de la denuncia impide a las instituciones contar con información completa para formular estrategias de prevención y control basadas en evidencia real, sesgando la distribución de los recursos policiales y limitando el alcance de los programas de asistencia a víctimas. De hecho, la no denuncia se manifiesta de manera marcadamente desigual según el perfil de la víctima y el tipo de delito. Por ejemplo, en el contexto chileno, el hurto es un delito con una alta ocurrencia, pero que presenta uno de los niveles más altos de no denuncia, llegando al 75,2% de los casos en algunas mediciones. Otros delitos contra las personas en el espacio público, como el robo con violencia o intimidación, también exhiben altas tasas de sub-registro. Esta disparidad en la propensión a denunciar evidencia la necesidad de identificar las características sociodemográficas y contextuales que incrementan las probabilidades de que una víctima opte por el silencio.
+
+Entre los factores determinantes de la no denuncia de DMCS, la literatura destaca consistentemente la desconfianza hacia el sistema de justicia y las autoridades de seguridad, tales como la policía y la fiscalía. Esta desconfianza se nutre de la percepción de una atención negligente, procesos inconclusos, la revictimización, el miedo a las represalias por parte de los victimarios, y el costo en tiempo y dinero que implican los trámites formales. A esto se suma el desafío territorial: en áreas rurales o conurbadas, la distancia geográfica y la centralización de los servicios de justicia en las cabeceras provinciales se erigen como una barrera significativa para el acceso a la denuncia. En el plano sociodemográfico, se ha observado en estudios de contexto latinoamericano que variables como el nivel educativo, el estado conyugal (siendo los viudos un grupo con una alta abstención) y la edad se asocian con la decisión de no denunciar.
+
+Un subconjunto crítico de los DMCS es la Violencia Sexual (VS), considerada una grave violación de los derechos humanos y un problema global de salud pública. A pesar de su alta prevalencia (una de cada tres mujeres en el mundo la ha experimentado), la VS sigue siendo uno de los delitos menos reportados a las autoridades, con menos del 10% de las víctimas a nivel global buscando la vía formal. En Chile, los estudios basados en la Encuesta Nacional de Violencia Intrafamiliar y Violencia contra la Mujer (ENVIF, con datos de 2017 y 2020) han demostrado que la no denuncia es la norma (apenas el 9,5% de las mujeres reportó haber denunciado). Sin embargo, la propensión a denunciar se relaciona con factores como ser mujer joven, presentar baja aceptación de roles de género tradicionales, o haber experimentado victimización en contextos privados o múltiples. Este análisis contextualizado —que incluye la influencia de las movilizaciones sociales recientes como el "mayo feminista" en 2018— resulta fundamental para comprender las complejas interacciones entre las normas patriarcales y las oportunidades de búsqueda de justicia.
+
+En consideración de lo anterior, el presente estudio se propone profundizar en la caracterización de la no denuncia de los Delitos de Mayor Connotación Social en Chile, integrando el análisis de las barreras institucionales, sociodemográficas y situacionales que perpetúan la cifra negra. Comprender estos factores es un requisito *sine qua non* para diseñar políticas de seguridad ciudadana más justas y eficientes que fortalezcan el acceso a la justicia y que permitan a las autoridades dirigir sus acciones hacia la reducción efectiva del fenómeno delictivo.
+
+```{r graficos_evolucion, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10, fig.height=8}
+
+
+# 1. Cargar librerías necesarias
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+
+# 2. Cargar la base de datos final (Asegúrate que la ruta sea correcta)
+ruta_rds <- "data/base_datos_final.rds"
+# Si estás en otro PC, descomenta y ajusta la ruta absoluta:
+# ruta_rds <- "C:/Users/Joaking/Desktop/No denuncia/nodenuncia_paper/data/base_datos_final.rds"
+
+if (!file.exists(ruta_rds)) {
+  stop("❌ No se encuentra 'base_datos_final.rds'. Ejecuta el Script 01 primero.")
+}
+
+df_final <- readRDS(ruta_rds)
+
+# 3. Diccionario de etiquetas para que el gráfico se vea bien
+nombres_delitos <- c(
+  "victima_rvi" = "Robo con Violencia",
+  "victima_rps" = "Robo por Sorpresa",
+  "victima_rfv" = "Robo en Vivienda",
+  "victima_hur" = "Hurto",
+  "victima_les_agr" = "Lesiones",
+  "victima_rdv" = "Robo de Vehículo",
+  "victima_rddv" = "Robo de Accesorios"
+)
+
+# 4. Preparar datos para el gráfico (Cálculo Ponderado)
+
+# A) Tasa de Victimización (% de hogares víctimas)
+df_vic <- df_final %>%
+  select(anio, fact_hog, starts_with("victima_")) %>%
+  pivot_longer(cols = starts_with("victima_"), names_to = "codigo", values_to = "es_victima") %>%
+  group_by(anio, codigo) %>%
+  summarise(
+    tasa = weighted.mean(es_victima, w = fact_hog, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(indicador = "Tasa de Victimización")
+
+# B) Cifra Oscura (% de víctimas que NO denunciaron)
+df_co <- df_final %>%
+  select(anio, fact_hog, starts_with("denuncio_")) %>%
+  pivot_longer(cols = starts_with("denuncio_"), names_to = "cod_den", values_to = "denuncio") %>%
+  filter(!is.na(denuncio)) %>% # Filtramos a los que NO fueron víctimas
+  mutate(
+    codigo = sub("denuncio_", "victima_", cod_den), # Ajustamos nombre para unir
+    es_cifra_oscura = if_else(denuncio == 0, 1, 0)  # 1 = No denunció
+  ) %>%
+  group_by(anio, codigo) %>%
+  summarise(
+    tasa = weighted.mean(es_cifra_oscura, w = fact_hog, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(indicador = "Cifra Oscura (No Denuncia)")
+
+# Unir ambos indicadores
+datos_grafico <- bind_rows(df_vic, df_co) %>%
+  mutate(delito = nombres_delitos[codigo])
+
+# 5. Generar el Gráfico
+ggplot(datos_grafico, aes(x = anio, y = tasa, color = delito, group = delito)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  geom_point(size = 3) +
+  
+  # Dividir en dos paneles (Victimización arriba, Cifra Oscura abajo)
+  facet_wrap(~indicador, scales = "free_y", nrow = 2) +
+  
+  # Formato de ejes
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, NA)) +
+  scale_x_continuous(breaks = 2016:2024) +
+  
+  # Etiquetas y Títulos
+  labs(
+    title = "Evolución de la Victimización y Cifra Oscura en Chile (2016-2024)",
+    subtitle = "Cálculo ponderado por factor de expansión del hogar",
+    x = "Año",
+    y = NULL,
+    color = "Tipo de Delito",
+    caption = "Fuente: Elaboración propia en base a ENUSC."
+  ) +
+  
+  # Tema visual limpio
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 12, color = "white"),
+    strip.background = element_rect(fill = "grey40", color = NA),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
+
+
+
+
+```
+
