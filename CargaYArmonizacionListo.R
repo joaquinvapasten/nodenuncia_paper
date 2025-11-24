@@ -95,29 +95,62 @@ NOMBRES <- list(
   re_vict_agreg = c("rva_dc", "rvh_dc"),
   sexo = c("rph_sexo", "sexo"),
   edad_cat = c("rph_edad", "edad"),
-  educ = c("rph_nivel", "nivel_educ"),
-  nse = c("quintil", "rph_nse"),
+  educ = c("rph_nivel", "nivel_educ", "e6a_nivel"), 
+  nse = c("quintil", "rph_nse", "nse"),
   estado_civil = c("rph_estado", "rph_estadocivil"),
   pueblo_orig = c("rph_pertenencia_indigena"),
   
   conf_carab = c("p21b_5_1", "ev_confia_cch"),
   conf_pdi = c("p21b_6_1", "ev_confia_pdi"),
   conf_fisc = c("p21b_8_1", "ev_confia_fmp"),
-  aum_del_barrio = c("p3_3_1", "p_aumento_barrio"),
+  aum_del_barrio = c("p3_3_1", "p1_3_1", "p_aumento_barrio"),
   tiempo_res = c("p22_1_1", "antig_sector")
 )
 
+
 # 4. PROCESAMIENTO
 procesar_anio <- function(df_raw, yr) {
+  # 1. Validación de Kish
   kish_var <- getv(df_raw, NOMBRES$kish)
-  if (!"1" %in% kish_var) return(NULL)
-  df_kish <- df_raw |> filter(kish_var == "1")
+  if (all(is.na(kish_var))) return(NULL) 
+  df_kish <- df_raw |> filter(as.character(kish_var) == "1")
+  if (nrow(df_kish) == 0) return(NULL)
+  
+  # 2. Armonización de Edad (Mantenemos lo que arreglamos antes)
+  edad_raw <- num(getv(df_kish, NOMBRES$edad_cat))
+  if (yr < 2019) {
+    edad_final <- case_when(
+      edad_raw < 15 ~ NA_real_,
+      edad_raw >= 15 & edad_raw <= 19 ~ 1,
+      edad_raw >= 20 & edad_raw <= 24 ~ 2,
+      edad_raw >= 25 & edad_raw <= 29 ~ 3,
+      edad_raw >= 30 & edad_raw <= 39 ~ 4,
+      edad_raw >= 40 & edad_raw <= 49 ~ 5,
+      edad_raw >= 50 & edad_raw <= 59 ~ 6,
+      edad_raw >= 60 & edad_raw <= 69 ~ 7,
+      edad_raw >= 70 & edad_raw <= 79 ~ 8,
+      edad_raw >= 80 & edad_raw <= 89 ~ 9,
+      edad_raw >= 90 ~ 10,
+      TRUE ~ NA_real_
+    )
+  } else {
+    edad_final <- edad_raw
+  }
+  
+  # 3. Extracción y Limpieza
+  
+  # --- LIMPIEZA ESPECÍFICA AUMENTO BARRIO ---
+  # Leemos el valor crudo
+  aum_raw <- num(getv(df_kish, NOMBRES$aum_del_barrio))
+  # Solo aceptamos 1, 2, 3. El resto (88, 99, 96, etc.) se vuelve NA
+  aum_clean <- if_else(aum_raw %in% c(1, 2, 3), aum_raw, NA_real_)
   
   df_tmp <- tibble(
     anio = yr,
     fact_hog = num(getv(df_kish, NOMBRES$fact_hog)),
     region = num(getv(df_kish, NOMBRES$region)),
     
+    # Victimización
     scr_rvi = num(getv(df_kish, NOMBRES$scr_rvi)),
     scr_rps = num(getv(df_kish, NOMBRES$scr_rps)),
     scr_rfv = num(getv(df_kish, NOMBRES$scr_rfv)),
@@ -126,7 +159,7 @@ procesar_anio <- function(df_raw, yr) {
     scr_rdv = num(getv(df_kish, NOMBRES$scr_rdv)),
     scr_rddv = num(getv(df_kish, NOMBRES$scr_rddv)),
     
-    # Importante: Aquí convertimos el texto " " o "1" a número
+    # Denuncias
     den_rvi_raw = num(getv(df_kish, NOMBRES$den_rvi)),
     den_rps_raw = num(getv(df_kish, NOMBRES$den_rps)),
     den_rfv_raw = num(getv(df_kish, NOMBRES$den_rfv)),
@@ -136,19 +169,25 @@ procesar_anio <- function(df_raw, yr) {
     den_rddv_raw = num(getv(df_kish, NOMBRES$den_rddv)),
     
     re_vict_agreg_raw = num(getv(df_kish, NOMBRES$re_vict_agreg)),
+    
+    # Socio-demográficos
     sexo = num(getv(df_kish, NOMBRES$sexo)),
-    edad_cat = num(getv(df_kish, NOMBRES$edad_cat)),
+    edad_cat = edad_final, # Usamos la edad corregida
     educ = num(getv(df_kish, NOMBRES$educ)),
     nse = num(getv(df_kish, NOMBRES$nse)),
     estado_civil = num(getv(df_kish, NOMBRES$estado_civil)),
     pueblo_orig = num(getv(df_kish, NOMBRES$pueblo_orig)),
+    
+    # Percepción y Contexto (USAMOS LA VARIABLE LIMPIA AQUI)
+    aum_del_barrio = aum_clean, 
+    
     conf_carab = na_codes(getv(df_kish, NOMBRES$conf_carab)),
     conf_pdi = na_codes(getv(df_kish, NOMBRES$conf_pdi)),
     conf_fisc = na_codes(getv(df_kish, NOMBRES$conf_fisc)),
-    aum_del_barrio = na_codes(getv(df_kish, NOMBRES$aum_del_barrio)),
     tiempo_res = na_codes(getv(df_kish, NOMBRES$tiempo_res))
   )
   
+  # 4. Construcción de Variables Finales
   df_final <- df_tmp |> mutate(
     victima_rvi = if_else(is.na(scr_rvi), 0, if_else(scr_rvi==1, 1, 0)),
     victima_rps = if_else(is.na(scr_rps), 0, if_else(scr_rps==1, 1, 0)),
@@ -161,7 +200,6 @@ procesar_anio <- function(df_raw, yr) {
     n_delitos = victima_rvi + victima_rps + victima_rfv + victima_hur + victima_les_agr + victima_rdv + victima_rddv,
     hogar_victima_dmcs = if_else(n_delitos > 0, 1, 0),
     
-    # LÓGICA DE DENUNCIA ROBUSTA (Case When)
     denuncio_rvi = case_when(victima_rvi==0 ~ NA_real_, den_rvi_raw==1 ~ 1, den_rvi_raw %in% c(0,2) ~ 0, TRUE ~ NA_real_),
     denuncio_rps = case_when(victima_rps==0 ~ NA_real_, den_rps_raw==1 ~ 1, den_rps_raw %in% c(0,2) ~ 0, TRUE ~ NA_real_),
     denuncio_rfv = case_when(victima_rfv==0 ~ NA_real_, den_rfv_raw==1 ~ 1, den_rfv_raw %in% c(0,2) ~ 0, TRUE ~ NA_real_),
